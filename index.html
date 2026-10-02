@@ -46,7 +46,8 @@ background:radial-gradient(circle at 50% 35%,var(--bg2),var(--bg1) 70%) fixed}
 input[type=time],input[type=text],textarea{font:inherit;color:var(--ink);background:transparent;border:0;border-bottom:1.5px dashed var(--line);width:100%;padding:5px 2px;border-radius:0;min-width:0}
 input[type=time]{font-weight:700}
 .planbox{display:flex;align-items:center;gap:4px}
-.info{border:0;background:var(--chip);color:var(--soft);border-radius:50%;width:24px;height:24px;font-size:12px;cursor:pointer;flex:none}
+.info{border:0;background:var(--chip);color:var(--soft);border-radius:50%;width:16px;height:16px;font:italic 700 10px/16px Georgia,serif;padding:0;cursor:pointer;flex:none;position:relative}
+.info::after{content:"";position:absolute;inset:-9px}
 .info.has{background:var(--rose);color:#fff}
 .bow{border:0;background:none;font-size:22px;cursor:pointer;filter:grayscale(1);opacity:.35;transition:transform .15s,opacity .15s}
 .row.done .bow{filter:none;opacity:1;transform:rotate(-12deg) scale(1.15)}
@@ -151,9 +152,22 @@ html.has-owner .splash{display:none}
 .sw{width:30px;height:30px;border-radius:50%;border:1px solid var(--line)}
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 @media (prefers-reduced-motion:reduce){.splash span{animation:none}}
+.boostline{font-size:12px;font-weight:700;color:var(--rose);margin-top:3px}
+.dt{display:flex;align-items:center;justify-content:center;width:20px;height:20px;font-size:10px;font-weight:700;color:var(--soft)}
+.dt.on{color:rgba(255,255,255,.8)}.dt.td{outline:2px solid var(--rose);outline-offset:1px}
+#sparkles{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+.sp{position:absolute;top:-30px;color:var(--rose);opacity:0;animation:fall linear forwards}
+@keyframes fall{0%{transform:translate(0,0) rotate(0);opacity:0}10%{opacity:1}50%{transform:translate(18px,55vh) rotate(180deg)}100%{transform:translate(-12px,110vh) rotate(360deg);opacity:0}}
+.quote{display:block;width:100%;border:2px dashed var(--rose);background:var(--card);color:var(--ink);font:inherit;font-size:24px;font-weight:700;line-height:1.5;text-align:center;border-radius:24px;padding:48px 24px;margin:8vh 0 12px;cursor:pointer;box-shadow:0 6px 24px color-mix(in srgb,var(--rose) 18%,transparent)}
+.qhint{text-align:center;color:var(--soft);font-size:13px}
+#quoteScrim .sheet{max-height:80vh;overflow:auto}
+#quoteList{display:flex;flex-direction:column;gap:8px}
+.qrow{background:var(--chip);border-radius:14px;padding:10px 14px;font-weight:600;line-height:1.4}
+.qcount{color:var(--soft);font-size:12px;margin:-4px 0 10px}
 </style>
 </head>
 <body>
+<div id="sparkles" aria-hidden="true"></div>
 <div class="splash" id="splash"><span>🎀</span></div>
 <button class="menubtn" id="menuBtn" aria-label="Open menu" aria-haspopup="true">🎀</button>
 <div class="menu" id="menu"><button id="optEdit"></button><button id="optHist">📖 All plans till now</button></div>
@@ -194,6 +208,12 @@ html.has-owner .splash{display:none}
   <h3>All plans till now</h3>
   <div class="histlist" id="hist"></div>
   <button class="close" id="histClose">Close</button>
+</div></div>
+
+<div class="scrim" id="quoteScrim"><div class="sheet" role="dialog" aria-label="All quotes">
+  <div class="bowtop">💗</div>
+  <h3>All my quotes</h3><div class="qcount" id="qCount"></div><div id="quoteList"></div>
+  <button class="close" id="quoteClose">Close</button>
 </div></div>
 
 <div class="scrim" id="setScrim"><div class="sheet" role="dialog" aria-label="Themes and mode">
@@ -302,7 +322,7 @@ function drawHist(){
 }
 $('menuBtn').onclick=function(){$('menu').classList.toggle('on')};
 $('optEdit').onclick=function(){$('menu').classList.remove('on');toggleEdit()};
-$('optHist').onclick=function(){$('menu').classList.remove('on');openOv('hist')};
+$('optHist').onclick=function(){$('menu').classList.remove('on');openOv(scr==='reminders'?'quotes':'hist')};
 $('histClose').onclick=closeOv;
 $('calScrim').onclick=function(e){if(e.target===this)closeOv()};
 $('backToday').onclick=function(){if(hst().day)history.back();else{cur=realToday();render()}};
@@ -338,7 +358,7 @@ function form(b,ph,extra,onAdd){
 }
 function tickBtn(o){
   var k=el('button','tick'+(o.x?' on':''),'🎀');k.setAttribute('aria-label','Mark done');
-  k.onclick=function(ev){var rc=ev.currentTarget.getBoundingClientRect();o.x=!o.x;saveApp();drawOther(curSec);if(o.x)burst(rc.left+rc.width/2,rc.top+rc.height/2)};
+  k.onclick=function(ev){var rc=ev.currentTarget.getBoundingClientRect();o.x=!o.x;if(o.x)o.cd=key(realToday());else delete o.cd;saveApp();drawOther(curSec);if(o.x)burst(rc.left+rc.width/2,rc.top+rc.height/2)};
   return k;
 }
 function delBtn(arr,o,label){
@@ -353,21 +373,46 @@ function textIn(o,k,ph,type){
 function card(o,arr,o2){
   var c=el('div','card');
   if(o2.tick)c.appendChild(tickBtn(o));
-  var tx=el('div','tx'+(o.x&&!editMode?' dn':''));
+  var tx=el('div','tx');
   if(editMode){tx.appendChild(textIn(o,'t','Text'));if(o2.ex){var x=textIn(o,o2.ex.k,o2.ex.ph,o2.ex.type);x.style.marginTop='6px';tx.appendChild(x)}}
-  else tx.textContent=o.t;
+  else{tx.appendChild(el('span',o.x?'dn':'',o.t));if(o2.boost&&o.x&&o.cd&&o.d)tx.appendChild(el('div','boostline',boostMsg(o)))}
   c.appendChild(tx);
   if(!editMode&&o2.chip)c.appendChild(el('span','chipx',o2.chip));
   if(editMode)c.appendChild(delBtn(arr,o));
   return c;
 }
+function boostMsg(o){
+  var n=Math.round((pd(o.d)-pd(o.cd))/86400000);
+  if(n>1)return '🎉 You finished this '+n+' days before your deadline!';
+  if(n===1)return '🎉 You finished this 1 day before your deadline!';
+  if(n===0)return '💪 Done right on deadline day!';
+  return '💖 Done, even '+(-n)+(n===-1?' day':' days')+' after the deadline. Still counts!';
+}
+function cyc(n){var k=n?((n-1)%7)+1:0,w=n?Math.floor((n-1)/7)+1:1;return '🔥 '+k+'/7'+(w>1?' · week '+w:'')+(k===7?' 🎉':'')}
+var curQuote=null,spT=null;
+function sparkOn(){
+  if(spT||window.matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  var box=$('sparkles'),I=['✨','✦','⭐','✧','💗'];
+  function mk(late){var x=el('span','sp',I[Math.floor(Math.random()*I.length)]);
+    x.style.left=Math.random()*100+'vw';x.style.fontSize=(10+Math.random()*16)+'px';
+    x.style.animationDuration=(5+Math.random()*5)+'s';if(late)x.style.animationDelay=(-Math.random()*6)+'s';
+    x.addEventListener('animationend',function(){x.remove()});box.appendChild(x)}
+  for(var i=0;i<12;i++)mk(true);
+  spT=setInterval(function(){if(!document.hidden)mk()},450);
+}
+function sparkOff(){clearInterval(spT);spT=null;$('sparkles').innerHTML=''}
+function drawQuotes(){
+  var L=app.reminders,b=$('quoteList');b.innerHTML='';$('qCount').textContent=L.length+(L.length===1?' quote':' quotes');
+  if(!L.length)b.appendChild(el('div','empty','No quotes yet 🌷'));
+  L.forEach(function(o){b.appendChild(el('div','qrow',o.t))});
+}
 function empty(b,t){b.appendChild(el('div','empty',editMode?t:'Nothing here yet 🌷 Tap the bow to switch to edit mode and add some.'))}
 function drawOther(id){
-  curSec=id;var b=$('oBody');b.innerHTML='';syncMenu();
+  curSec=id;var b=$('oBody');b.innerHTML='';syncMenu();if(id!=='reminders'||editMode)sparkOff();
   if(id==='todos'){
     if(editMode)form(b,'What needs doing?',{ph:'Deadline',type:'date'},function(t,d){app.todos.push({t:t,d:d,x:false})});
     if(!app.todos.length)empty(b,'Nothing here yet. Add a task with a deadline 🌷');
-    app.todos.slice().sort(function(x,y){return (x.x-y.x)||((x.d||'9')<(y.d||'9')?-1:1)}).forEach(function(o){b.appendChild(card(o,app.todos,{tick:1,chip:o.x?'':due(o.d),ex:{k:'d',ph:'Deadline',type:'date'}}))});
+    app.todos.slice().sort(function(x,y){return (x.x-y.x)||((x.d||'9')<(y.d||'9')?-1:1)}).forEach(function(o){b.appendChild(card(o,app.todos,{tick:1,boost:1,chip:o.x?'':due(o.d),ex:{k:'d',ph:'Deadline',type:'date'}}))});
   }else if(id==='longterm'){
     if(editMode)form(b,'A big dream',{ph:'Target (e.g. 2028)'},function(t,g){app.longterm.push({t:t,g:g,x:false})});
     if(!app.longterm.length)empty(b,'Dream big here 🌷');
@@ -386,19 +431,27 @@ function drawOther(id){
       var m=el('div','tx');
       if(editMode)m.appendChild(textIn(h,'t','Habit'));else m.appendChild(el('div','',h.t));
       var dots=el('div','dots');
-      for(var i=6;i>=0;i--){var d=realToday();d.setDate(d.getDate()-i);dots.appendChild(el('span','dt'+(h.days.indexOf(key(d))>-1?' on':'')))}
+      for(var i=6;i>=0;i--){var d=realToday();d.setDate(d.getDate()-i);dots.appendChild(el('span','dt'+(h.days.indexOf(key(d))>-1?' on':'')+(i===0?' td':''),['S','M','T','W','T','F','S'][d.getDay()]))}
       m.appendChild(dots);
-      c.appendChild(tk);c.appendChild(m);c.appendChild(el('span','chipx','🔥 '+n+(n===1?' day':' days')));
+      c.appendChild(tk);c.appendChild(m);c.appendChild(el('span','chipx',cyc(n)));
       if(editMode)c.appendChild(delBtn(app.habits,h,'Delete habit'));
       b.appendChild(c);
     });
   }else if(id==='reminders'){
-    var big=el('div','big','Tap the button when you need a little lift 💗');
-    var bt=el('button','pill','💗 I need a boost');bt.style.cssText='display:block;margin:0 auto 16px';
-    bt.onclick=function(){var L=app.reminders;if(!L.length){big.textContent='Add your first reminder in edit mode 🌷';return}big.textContent=L[Math.floor(Math.random()*L.length)].t;var rc=bt.getBoundingClientRect();burst(rc.left+rc.width/2,rc.top)};
-    b.appendChild(big);b.appendChild(bt);
-    if(editMode)form(b,'Something that lifts you up (a song, a walk, a note to self)',null,function(t){app.reminders.push({t:t})});
-    app.reminders.forEach(function(o){b.appendChild(card(o,app.reminders,{}))});
+    var L=app.reminders;
+    if(editMode){
+      form(b,'Add a quote or something that lifts you up',null,function(t){app.reminders.push({t:t})});
+      if(!L.length)empty(b,'Add your first quote above 🌷');
+      L.forEach(function(o){b.appendChild(card(o,L,{}))});
+    }else if(!L.length){
+      b.appendChild(el('div','empty','No quotes yet 🌷 Tap the bow, then "Switch to edit mode" to add some.'));
+    }else{
+      if(!curQuote||L.indexOf(curQuote)<0)curQuote=L[Math.floor(Math.random()*L.length)];
+      var q=el('button','quote',curQuote.t);q.setAttribute('aria-label','Show another quote');
+      q.onclick=function(){if(L.length>1){var n;do{n=L[Math.floor(Math.random()*L.length)]}while(n===curQuote);curQuote=n}drawOther('reminders')};
+      b.appendChild(q);b.appendChild(el('div','qhint','tap the quote for another ✨'));
+      sparkOn();
+    }
   }
 }
 
@@ -409,10 +462,13 @@ function syncMenu(){
   var sc=scr==='schedule',lock=sc&&!isToday();
   $('optEdit').textContent=editMode?'👀 Switch to read mode':'✏️ Switch to edit mode';
   $('optEdit').style.display=lock?'none':'';
-  $('optHist').style.display=sc?'':'none';
+  $('optHist').style.display=(sc||scr==='reminders')?'':'none';
+  $('optHist').textContent=sc?'📖 All plans till now':'📖 Read all quotes';
 }
 function show(id,day,edit){
   var changed=scr!==id,h=id==='home';
+  if(id==='reminders'&&changed)curQuote=null;
+  sparkOff();
   ['home','schedule','other'].forEach(function(k){$(k).style.display='none'});
   $('menu').classList.remove('on');scr=id;editMode=!!edit;
   $('homeBtn').style.display=h?'none':'block';$('menuBtn').style.display=h?'none':'block';$('setBtn').style.display=h?'block':'none';
@@ -423,11 +479,11 @@ function show(id,day,edit){
 }
 function hideOvEls(){
   if($('detScrim').classList.contains('on')){if(editing&&editMode){editing.d=$('detText').value;save()}editing=null;$('detScrim').classList.remove('on')}
-  $('calScrim').classList.remove('on');$('setScrim').classList.remove('on');
+  $('calScrim').classList.remove('on');$('setScrim').classList.remove('on');$('quoteScrim').classList.remove('on');
 }
 function applyState(x){
   x=x||{s:'home',d:0};hideOvEls();show(x.s,x.day,x.e);
-  if(x.o==='hist'){drawHist();$('calScrim').classList.add('on')}else if(x.o==='set')$('setScrim').classList.add('on');
+  if(x.o==='hist'){drawHist();$('calScrim').classList.add('on')}else if(x.o==='set')$('setScrim').classList.add('on');else if(x.o==='quotes'){drawQuotes();$('quoteScrim').classList.add('on')}
 }
 function nav(id){hpush({s:id,d:1});show(id)}
 function toggleEdit(){
@@ -437,7 +493,7 @@ function toggleEdit(){
 }
 function openOv(n){
   var x=hst();hpush({s:x.s,day:x.day,e:x.e,o:n,d:(x.d||0)+1});
-  if(n==='hist'){drawHist();$('calScrim').classList.add('on')}else if(n==='set')$('setScrim').classList.add('on');
+  if(n==='hist'){drawHist();$('calScrim').classList.add('on')}else if(n==='set')$('setScrim').classList.add('on');else if(n==='quotes'){drawQuotes();$('quoteScrim').classList.add('on')}
 }
 function closeOv(){if(hst().o)history.back()}
 function openDay(k){
@@ -448,6 +504,8 @@ window.addEventListener('popstate',function(e){applyState(e.state)});
 $('homeBtn').onclick=function(){var n=hst().d||0;if(n>0)history.go(-n);else show('home')};
 $('setBtn').onclick=function(){openOv('set')};
 $('setClose').onclick=closeOv;
+$('quoteClose').onclick=closeOv;
+$('quoteScrim').onclick=function(e){if(e.target===this)closeOv()};
 $('setScrim').onclick=function(e){if(e.target===this)closeOv()};
 SEC.forEach(function(z){var b=el('button','bw');b.setAttribute('aria-label',z.n);b.appendChild(el('i','','🎀'));b.appendChild(el('span','',z.s));b.onclick=function(){nav(z.id)};$('bows').appendChild(b)});
 
